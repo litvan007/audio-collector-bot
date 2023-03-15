@@ -6,12 +6,13 @@ from telebot import types
 from telebot.async_telebot import AsyncTeleBot
 
 import asyncio
+import requests
+from bs4 import BeautifulSoup
 
 import os
 from scipy.io import wavfile
 
 android_root = "./android_inst"
-db_path = './audio_db.yaml'
 
 bot = AsyncTeleBot('6060192876:AAE6615iBZ-hrwvTEUQanhoDD-LPHMnH_FI')
 
@@ -26,9 +27,13 @@ async def send_welcome(message):
 
     markup.add(btn1, btn2)
     await bot.send_message(message.chat.id, 
-    '''Приветсвтую! Вы участвуете в процессе сбора аудиоданных для моей крусовой работы "Определение ключевых слов в зашумленных сигналах".
-Чтобы приступить выберите тип вашего устройства
+    '''Приветствую! Вы участвуете в процессе сбора аудиоданных для моей курсовой работы "Создание системы голосового управления для механического манипулятора".
+Собранные аудиозаписи будут использоваться в обучении нейросети по распознаванию голосовых команд. И, в дальнейшем разработанная система голосового управления будет интегрирована в рабочий прототип манипулятора на МКС.
+Чтобы приступить, выберите тип вашего устройства
     ''', reply_markup=markup
+    )
+    
+    await bot.send_message(message.chat.id, text='В новой версии бота теперь доступны анекдоты после нескольких отправленных записей'
     )
 
 @bot.callback_query_handler(func=lambda call: call.data == 'Android' or call.data == 'IOS')
@@ -92,9 +97,6 @@ async def user_recording(call):
     await bot.send_message(599202079, text = f'Пользователь {call.from_user.username if call.from_user.username is not None else "Empty"} зарагестрировался', 
                             parse_mode="HTML") 
 
-    await bot.send_message(call.message.chat.id, text = '''Запись голоса происходит <b>исключительно через скаченное приложение</b>
-        ''', parse_mode="HTML", reply_markup=keyboard) 
-
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
     get_button = types.KeyboardButton("Получить фразу")
     keyboard.add(get_button)
@@ -149,9 +151,9 @@ async def get_phrase(message):
                 with open(f"./user_{message.from_user.id}/audio_commands.yaml", 'w') as f:
                     yaml.safe_dump(commands_list, f)
 
-                await bot.send_message(message.chat.id, text='Запишите комманду:', parse_mode="HTML")                    
+                await bot.send_message(message.chat.id, text='Запишите команду:', parse_mode="HTML")                    
                 await bot.send_message(message.chat.id, text=f'<b>{curr_command}</b>', parse_mode="HTML")                    
-                await bot.send_message(message.chat.id, text='Отправьте аудиозапись <b>файлом</b>', parse_mode="HTML")
+                await bot.send_message(message.chat.id, text='Отправьте аудиозапись <b>файлом</b> или <b>аудио</b>', parse_mode="HTML")
                 state[1] = f'{curr_command}_{index}_{cond}'
 
             with open(f'user_{message.from_user.id}/cond', 'w') as f:
@@ -161,7 +163,13 @@ async def get_phrase(message):
     except FileNotFoundError:
         await bot.send_message(message.chat.id, text='Для начала прочитайте до конца инструкцию <b>/help</b>', parse_mode="HTML")
 
-@bot.message_handler(content_types=['document'])
+async def get_joke():
+    joke_html = requests.get('https://nekdo.ru/random/').text
+    joke_text = BeautifulSoup(joke_html, 'lxml').find('div', class_='text').get_text()
+
+    return joke_text
+
+@bot.message_handler(content_types=['document', 'audio'])
 async def audio_handler(message):
     try:
         state = None
@@ -169,11 +177,12 @@ async def audio_handler(message):
             state = f.readlines()
 
         if state[1] != 'waiting_for_phrase' and state[1] != 'end':
-            file_name = message.document.file_name
-            if file_name.split('.')[-1] != 'wav':
+            file_type = message.document.mime_type if message.content_type == 'document' else message.audio.mime_type
+#print(file_type)
+            if file_type.split('/')[-1] != 'x-wav':
                 await bot.send_message(message.chat.id, text="Файл должен быть в формате <b>wav</b>\nПройдите инcтрукцию /help", parse_mode="HTML")
             else:
-                file_info = (await bot.get_file(message.document.file_id))
+                file_info = (await bot.get_file(message.document.file_id if message.content_type == 'document' else message.audio.file_id))
                 downloaded_file = (await bot.download_file(file_info.file_path))
                 with open(f'./user_{message.from_user.id}/{state[1]}.wav', 'wb') as new_file:
                         new_file.write(downloaded_file)
@@ -191,7 +200,14 @@ async def audio_handler(message):
                         state[1] = 'waiting_for_phrase'
                         f.write(state[0])
                         f.write(state[1])
-                    await bot.send_message(message.chat.id, text=f"Запись получена. {54-int(state[0])}/6", parse_mode="HTML") # TODO
+                    await bot.send_message(message.chat.id, text=f"Запись получена. {54-int(state[0])}/54", parse_mode="HTML") # TODO
+
+                    if int(state[0]) % random.randint(3, 5) == 0:
+                        text = await get_joke()
+                        await bot.send_message(599202079, text = f'Пользователь {message.from_user.username if message.from_user.username is not None else "Empty"} получил анекдот: {text}', 
+                            parse_mode="HTML")
+                        await bot.send_message(message.chat.id, 'Отлично! Если бы мой бот мог аплодировать, он бы это сделал! Вы заслужили анекдот')
+                        await bot.send_message(message.chat.id, text)
 
                 
         elif state[1] == 'waiting_for_phrase':
@@ -208,9 +224,11 @@ async def send_welcome(message):
                             parse_mode="HTML") 
     await bot.send_message(message.chat.id, 
     ''' 1) Если вы не нажимали кнопку <b>Начинаем</b>, то снова введите /start.
-2) Если вы отправляли некорректный файл, пожалуйста, выставите правильные настройке в вашем приложении для записи аудио. 
-3) Если вы получили в процессе использования рекомендацию выбрать /help, то скорее всего вы нарушаете порядок работы с ботом, поэтому рекомендую удалить этот чат и начать работу с начала. 
-4) Если вы не понимаете зачем это нужно, или что будет с вашими персональными данными, или вы по любым другим вопросам, то просто напишите @Ivanhoe_w.
+2) Если вы случайно удалили чат, то необходимо снова ввести /start, а затем нажать кнопку <b>Начинаем</b>.
+3) Чтобы вспомнить какую фразу вам надо записать введите /status.
+4) Если вы отправляли некорректный файл, пожалуйста, выставите правильные настройки в вашем приложении для записи аудио. 
+5) Если вы получили в процессе использования рекомендацию выбрать /help, то скорее всего вы нарушаете порядок работы с ботом, поэтому рекомендую удалить этот чат и начать работу с начала. 
+6) Если вы не понимаете зачем это нужно, или что будет с вашими персональными данными, или вы по любым другим вопросам, то просто напишите @Ivanhoe_w.
     ''', parse_mode='HTML'
     )
 
@@ -218,8 +236,8 @@ async def send_welcome(message):
 async def send_welcome(message):
     try:
         with open(f'user_{message.from_user.id}/cond', 'r') as f:
-            cnt = f.readlines()[0]
-            await bot.send_message(message.chat.id, f"Записано {54-int(cnt)}/54")
+            cnt, word = f.readlines()
+            await bot.send_message(message.chat.id, f"Текущая фраза <b>{word.split('_')[0] if word != 'waiting_for_phrase' else 'еще не получена'}</b>\nЗаписано {54-int(cnt)}/54", parse_mode='HTML')
     except FileNotFoundError:
         await bot.send_message(message.chat.id, f"Чтобы узнать сколько вам нужно сделать аудиозаписей, прочитайте до конца инструкцию")
 
@@ -242,5 +260,5 @@ def commands_data_create(path):
         yaml.dump(commands_yaml, f)
 
 import asyncio
-asyncio.run(bot.polling())
+asyncio.run(bot.polling(non_stop=True, request_timeout=90))
 
