@@ -14,7 +14,7 @@ from scipy.io import wavfile
 
 android_root = "./android_inst"
 
-bot = AsyncTeleBot()
+bot = AsyncTeleBot('6060192876:AAE6615iBZ-hrwvTEUQanhoDD-LPHMnH_FI')
 
 @bot.message_handler(commands=['start'])
 async def send_welcome(message):
@@ -194,10 +194,13 @@ async def audio_handler(message):
                     await bot.send_message(message.chat.id, text=f"Ваша запись слишком большая. Нeобходима длина менее 5 секунд", parse_mode="HTML")
                 else:
                     state[0] = str(int(state[0].split('\n')[0]) - 1) + '\n'
-                    await bot.send_message(599202079, text = f'''Пользователь {message.from_user.username if message.from_user.username is not None else "Empty"} отрпавил слово {state[1]}
+                    await bot.send_message(599202079, text = f'''Пользователь {message.from_user.username if message.from_user.username is not None else "Empty"} отправил слово {state[1]}
 Ему осталось {state[0]}''')
                     with open(f'user_{message.from_user.id}/cond', 'w') as f:
-                        state[1] = 'waiting_for_phrase'
+                        if int(state[0]) == 0:
+                          state[1] = 'end'
+                        else:
+                          state[1] = 'waiting_for_phrase'
                         f.write(state[0])
                         f.write(state[1])
                     await bot.send_message(message.chat.id, text=f"Запись получена. {54-int(state[0])}/54", parse_mode="HTML") # TODO
@@ -209,11 +212,11 @@ async def audio_handler(message):
                         await bot.send_message(message.chat.id, 'Отлично! Если бы мой бот мог аплодировать, он бы это сделал! Вы заслужили анекдот')
                         await bot.send_message(message.chat.id, text)
 
-                
         elif state[1] == 'waiting_for_phrase':
             await bot.send_message(message.chat.id, text="Для начала получите фразу", parse_mode="HTML")
-        elif state[1] == 'end':
-            await bot.send_message(message.chat.id, text='Вы отправили все записи. Если у вас остались какие-либо сомнения, то напишите @Ivanhoe_w', 
+
+        if state[1] == 'end':
+            await bot.send_message(message.chat.id, text='Поздравляю! Вы отправили все записи. Если у вас остались какие-либо сомнения, то напишите @Ivanhoe_w', 
                                         parse_mode="HTML")
     except FileNotFoundError:
         await bot.send_message(message.chat.id, text="Для начала прочитайте инструкцию /help", parse_mode="HTML")
@@ -261,4 +264,3 @@ def commands_data_create(path):
 
 import asyncio
 asyncio.run(bot.polling(non_stop=True, request_timeout=90))
-
