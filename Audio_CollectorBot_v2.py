@@ -14,7 +14,7 @@ from scipy.io import wavfile
 
 android_root = "./android_inst"
 
-bot = AsyncTeleBot('6060192876:AAE6615iBZ-hrwvTEUQanhoDD-LPHMnH_FI')
+bot = AsyncTeleBot('')
 
 @bot.message_handler(commands=['start'])
 async def send_welcome(message):
